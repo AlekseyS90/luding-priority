@@ -1,0 +1,10 @@
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { products } from '../services/catalogMock';
+import type { BasketLine, Product } from '../types/catalog';
+type State = { age: 'unknown' | 'accepted' | 'denied'; basket: BasketLine[]; setAge: (age: State['age']) => void; add: (p: Product) => void; change: (id: string, delta: number) => void; clear: () => void; count: number; lines: Array<{ product: Product; quantity: number }> };
+const Context = createContext<State | null>(null);
+export function PriorityProvider({ children }: { children: ReactNode }) { const [age, setAgeState] = useState<State['age']>(() => (localStorage.getItem('lp-age') as State['age']) || 'unknown'); const [basket, setBasket] = useState<BasketLine[]>(() => JSON.parse(localStorage.getItem('lp-basket') || '[]'));
+ useEffect(() => localStorage.setItem('lp-age', age), [age]); useEffect(() => localStorage.setItem('lp-basket', JSON.stringify(basket)), [basket]);
+ const setAge = (value: State['age']) => setAgeState(value); const add = (p: Product) => { if (p.stock) setBasket(old => { const item = old.find(x => x.productId === p.id); return item ? old.map(x => x.productId === p.id ? { ...x, quantity: Math.min(p.stock, x.quantity + 1) } : x) : [...old, { productId: p.id, quantity: 1 }]; }); }; const change = (id: string, delta: number) => setBasket(old => old.flatMap(x => { const product = products.find(p => p.id === id)!; const quantity = Math.min(product.stock, x.quantity + delta); return quantity > 0 ? [{ ...x, quantity }] : []; })); const lines = useMemo(() => basket.map(x => ({ product: products.find(p => p.id === x.productId)! , quantity: x.quantity })).filter(x => x.product), [basket]); const count = basket.reduce((total, x) => total + x.quantity, 0);
+ return <Context.Provider value={{ age, basket, setAge, add, change, clear: () => setBasket([]), count, lines }}>{children}</Context.Provider>; }
+export const usePriority = () => { const ctx = useContext(Context); if (!ctx) throw new Error('PriorityProvider missing'); return ctx; };
